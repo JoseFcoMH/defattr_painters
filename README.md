@@ -1,9 +1,9 @@
 Scripts to generate .defattr files for chimeraX given a .cif structure
 
 ## System requirements
-    SO: Tested on Red Hat Enterprise Linux 8
-    CPU: Tested on Intel and AMD CPUs
-    RAM: At least 4GB
+SO: Tested on Red Hat Enterprise Linux 8
+CPU: Tested on Intel and AMD CPUs
+RAM: At least 4GB
 
 ## Dependencies
     numpy
