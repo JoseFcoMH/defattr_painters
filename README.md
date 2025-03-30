@@ -70,7 +70,7 @@ The {runName}\_{other} must follow the default local AF3 output file structure.
 
 
 ### Example usage
-Navigate to the cloned repository and run
+Navigate to the cloned repository, unzip the test_data.zip folder, and run
 
     python AF3screenToStructure.py --runName zak --baseDir test_data/AF3_output  --outDir . --cifFile test_data/4ug0.cif
 
