@@ -33,6 +33,7 @@ if not in_args.outDir:
     
 runName = in_args.runName
 baseDir = in_args.baseDir
+outDir = in_args.outDir
 cif_file = in_args.cifFile
 
 
@@ -62,25 +63,25 @@ class af3_pair():
         self.summaries = glob.glob(f'{pred_dir}/*/summary_confidences.json')
         self.iCP_attr = None
         
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            results = list(executor.map(self.process_summary, self.summaries))
+        # with concurrent.futures.ThreadPoolExecutor() as executor:
+        #     results = list(executor.map(self.process_summary, self.summaries))
         
-        for result in results:
-            min_pae, iptm, ptm = result
-            self.min_paes.append(min_pae)
-            self.iptms.append(iptm)
-            self.ptms.append(ptm)
+        # for result in results:
+        #     min_pae, iptm, ptm = result
+        #     self.min_paes.append(min_pae)
+        #     self.iptms.append(iptm)
+        #     self.ptms.append(ptm)
         
-        self.mean_iptm = np.mean(self.iptms)
-        self.min_pae = np.min(self.min_paes)
+        # self.mean_iptm = np.mean(self.iptms)
+        # self.min_pae = np.min(self.min_paes)
     
-    def process_summary(self, summary):
-        with open(summary, 'r') as f:
-            result = json.load(f)
-            min_pae = result['chain_pair_pae_min'][0][1]
-            iptm = result['iptm']
-            ptm = result['ptm']
-        return min_pae, iptm, ptm
+    # def process_summary(self, summary):
+    #     with open(summary, 'r') as f:
+    #         result = json.load(f)
+    #         min_pae = result['chain_pair_pae_min'][0][1]
+    #         iptm = result['iptm']
+    #         ptm = result['ptm']
+    #     return min_pae, iptm, ptm
         
     def load_chains(self):
         cif_dict = self.structure
@@ -204,7 +205,7 @@ af3_pairs = [af3_pair(pair).load_chains().map_interactor2(refSeqs).calc_attr() f
 with open(f'{outDir}/{runName}_mappedPairs.pkl', 'wb') as f:
     pkl.dump(af3_pairs, f)
     
-best_dict = {chain:('', -np.inf) for chain in set([x.get_match()[0] for x in af3_pairs])}
+best_dict = {chain:('', 0) for chain in set([x.get_match()[0] for x in af3_pairs])}
 for pair in af3_pairs:
     if pair.get_match()[1] > best_dict[pair.get_match()[0]][1]:
         best_dict[pair.get_match()[0]] = (pair.get_interactor(), pair.get_match()[1], pair)
