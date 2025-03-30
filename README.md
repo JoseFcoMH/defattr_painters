@@ -76,7 +76,7 @@ Navigate to the cloned repository and run
 
 Which should finish in a few seconds. 
 
-    Or run
+Or run
     
     python transcriptToStructure.py --inputFile test_data/RNA_crosslinks/exampleFile.tsv \
                                     --inputStrand + \
