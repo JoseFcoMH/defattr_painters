@@ -19,17 +19,11 @@ parser = argparse.ArgumentParser(
 )
 
 parser.add_argument('--runName', required=True, help='Name of run and ref protein to process.')
-parser.add_argument('--baseDir', required=False, help='Parent directory holding the AF3 inference output.')
-parser.add_argument('--outDir', required=False, help='Directory to save the output.')
-parser.add_argument('--cifFile', required=False, help='Full path to .cif file o paint.', default='/home/vzl634/datadir/structures/4ug0.cif')
+parser.add_argument('--baseDir', required=True, help='Parent directory holding the AF3 inference output.')
+parser.add_argument('--outDir', required=True, help='Directory to save the output.')
+parser.add_argument('--cifFile', required=True, help='Full path to .cif file o paint.')
 
 in_args = parser.parse_args()
-
-if not in_args.baseDir:
-    in_args.baseDir = f'/home/vzl634/datadir/af3_runs/{in_args.runName}_run/inference_output'
-
-if not in_args.outDir:
-    in_args.outDir = os.path.abspath(os.path.join(in_args.baseDir, os.pardir))
     
 runName = in_args.runName
 baseDir = in_args.baseDir
