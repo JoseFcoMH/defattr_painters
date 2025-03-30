@@ -26,11 +26,9 @@ parser.add_argument('--inputFile', required=True, help='Path to input file. Must
 parser.add_argument('--inputStrand', required=True, help='Strand where the values of the input file are. + or -')
 parser.add_argument('--geneOfInterest', required=True, help='Name of the gene to look at, as per the GTF file. E.g., RNA18SN1')
 parser.add_argument('--outFile', required=False, help='File to save the output .defattr to.')
-parser.add_argument('--gtf', required=False, help="Path to a GTF file. Assumes columns ['seqname', 'source', 'feature', 'start', 'end', 'score', 'strand', 'frame', 'attribute'] like in the RefSeq GTF.",
-                   default='/home/vzl634/datadir/eCLIP/HS_RefSeq/GCF_000001405.40_GRCh38.p14_genomic.gtf')
-parser.add_argument('--fasta', required=False, help='Path to a genome fasta file.',
-                   default='/home/vzl634/datadir/eCLIP/HS_RefSeq/GCF_000001405.40_GRCh38.p14_genomic.fna')
-parser.add_argument('--cifFile', required=False, help='Full path to .cif file to paint.', default='/home/vzl634/datadir/structures/4ug0.cif')
+parser.add_argument('--gtf', required=True, help="Path to a GTF file. Assumes columns ['seqname', 'source', 'feature', 'start', 'end', 'score', 'strand', 'frame', 'attribute'] like in the RefSeq GTF.")
+parser.add_argument('--fasta', required=True, help='Path to a genome fasta file.')
+parser.add_argument('--cifFile', required=True, help='Full path to .cif file to paint.')
 parser.add_argument('--skipCheck', required=False, help='Whether to assume that RNA chains have a description containing the keyword "RNA" for speed.', default=False)
 
 in_args = parser.parse_args()
