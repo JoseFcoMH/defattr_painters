@@ -100,6 +100,9 @@ Which should also finish in a few seconds.
 [AlphaFold3_Publication](https://www.nature.com/articles/s41586-024-07487-w)
 [ChimeraX](https://onlinelibrary.wiley.com/doi/10.1002/pro.4792)
 
+## Citation
+[ZAKα is a sensor of mRNA stasis at the ribosomal exit channel]https://www.biorxiv.org/content/10.1101/2025.11.22.689755v1
+
 
 
 
