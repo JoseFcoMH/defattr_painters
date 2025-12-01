@@ -6,7 +6,8 @@ CPU: Tested on Intel and AMD CPUs
 RAM: At least 4GB
 
 ## Dependencies
-Note: for AF3 screen to structure, only numpy and biopython are needed\n
+Note: for AF3 screen to structure, only numpy and biopython are needed
+
     numpy
     biopython
     pandas
@@ -96,5 +97,6 @@ Which should also finish in a few seconds.
 [PyRanges_Repo](https://github.com/pyranges/pyranges)
 [Pyranges_Publication](https://academic.oup.com/bioinformatics/article/36/3/918/5543103)
 [ChimeraX](https://onlinelibrary.wiley.com/doi/10.1002/pro.4792)
+
 
 
