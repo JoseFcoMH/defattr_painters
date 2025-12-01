@@ -10,9 +10,7 @@ Note: for AF3 screen to structure, only numpy and biopython are needed
 
     numpy
     biopython
-    pandas
     polars
-    pyranges
     pyfaidx
 
 ## Installation
@@ -53,24 +51,26 @@ The {runName}\_{other} must follow the default local AF3 output file structure.
 
 ### Usage of transcriptToStructure.py
     
-    usage: Map bed-like tracks to the RNA in some structure. [-h] --inputFile INPUTFILE --inputStrand INPUTSTRAND --geneOfInterest GENEOFINTEREST [--outFile OUTFILE] [--gtf GTF] [--fasta FASTA] [--cifFile CIFFILE] [--skipCheck SKIPCHECK]
+    usage: Map bed-like tracks to the RNA in some structure. [-h] --inputFiles INPUTFILES --inputStrands INPUTSTRANDS --genesOfInterest GENESOFINTEREST --outDir OUTDIR --runName RUNNAME --gtf GTF --fasta FASTA --cifFile
+                                                             CIFFILE [--skipCheck]
     
     Problems? Ask Jose.
     
-    optional arguments:
+    options:
       -h, --help            show this help message and exit
-      --inputFile INPUTFILE
-                            Path to input file. Must hace 3 columns [Chromosome, Position, Score]
-      --inputStrand INPUTSTRAND
-                            Strand where the values of the input file are. + or -
-      --geneOfInterest GENEOFINTEREST
-                            Name of the gene to look at, as per the GTF file. E.g., RNA18SN1
-      --outFile OUTFILE     File to save the output .defattr to.
+      --inputFiles INPUTFILES
+                            Comma-separated paths to input files. Each must hace 3 columns [Chromosome, Position, Score]
+      --inputStrands INPUTSTRANDS
+                            Comma-separated strand where the values of the input files are, in the same order as the input files. + or -
+      --genesOfInterest GENESOFINTEREST
+                            Comma-separated names of the gene to look at, as per the GTF file. E.g. RNA18SN1,RNA18SN2
+      --outDir OUTDIR       Directory to save the output .defattr in.
+      --runName RUNNAME     Unique name for this run.
       --gtf GTF             Path to a GTF file. Assumes columns ['seqname', 'source', 'feature', 'start', 'end', 'score', 'strand', 'frame', 'attribute'] like in the RefSeq GTF.
       --fasta FASTA         Path to a genome fasta file.
       --cifFile CIFFILE     Full path to .cif file to paint.
-      --skipCheck SKIPCHECK
-                            Whether to assume that RNA chains have a description containing the keyword "RNA" for speed.
+      --skipCheck           Whether to assume that RNA chains have a description containing the keyword "RNA" for speed.
+    
 
 
 ### Example usage
@@ -82,13 +82,15 @@ Which should finish in a few seconds.
 
 Or run
     
-    python transcriptToStructure.py --inputFile test_data/RNA_crosslinks/exampleFile.tsv \
-                                    --inputStrand + \
-                                    --geneOfInterest RNA18SN1 \
-                                    --outFile RNA_crosslinks.defattr \
+    python transcriptToStructure.py --inputFiles test_data/RNA_crosslinks/exampleFile.tsv \
+                                    --inputStrands + \
+                                    --genesOfInterest RNA18SN1 \
+                                    --outDir . \
                                     --gtf /path/to/gtf \
                                     --fasta /path/to/fasta \
-                                    --cifFile test_data/4ug0.cif
+                                    --runName test_run \
+                                    --cifFile test_data/4ug0.cif \
+                                    --skipCheck
 
 Which should also finish in a few seconds.
 
@@ -96,9 +98,8 @@ Which should also finish in a few seconds.
 
 [AlphaFold3_Repo](https://github.com/google-deepmind/alphafold3)
 [AlphaFold3_Publication](https://www.nature.com/articles/s41586-024-07487-w)
-[PyRanges_Repo](https://github.com/pyranges/pyranges)
-[Pyranges_Publication](https://academic.oup.com/bioinformatics/article/36/3/918/5543103)
 [ChimeraX](https://onlinelibrary.wiley.com/doi/10.1002/pro.4792)
+
 
 
 
