@@ -1,38 +1,20 @@
 import numpy as np
-import json
-import os
-import glob
 from Bio.PDB.MMCIF2Dict import MMCIF2Dict
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
-from Bio import SeqIO
-from Bio import pairwise2
-from concurrent.futures import ThreadPoolExecutor
-import concurrent.futures
+from Bio.Align import PairwiseAligner
+
+import json
+import os
+from concurrent.futures import ProcessPoolExecutor
 import pickle as pkl
 import argparse
-
-parser = argparse.ArgumentParser(
-    prog='Process AF3 inference. Asumes a directory structure of {baseDir}/{runName}_{other}, where {runName}_{other} are the {refProtein}_{possibleInteractor} pairs.',
-    description='Problems? Ask Jose.',
-    epilog='Hope it works.'
-)
-
-parser.add_argument('--runName', required=True, help='Name of run and ref protein to process.')
-parser.add_argument('--baseDir', required=True, help='Parent directory holding the AF3 inference output.')
-parser.add_argument('--outDir', required=True, help='Directory to save the output.')
-parser.add_argument('--cifFile', required=True, help='Full path to .cif file o paint.')
-
-in_args = parser.parse_args()
-    
-runName = in_args.runName
-baseDir = in_args.baseDir
-outDir = in_args.outDir
-cif_file = in_args.cifFile
+from pathlib import Path
+import logging
 
 
 def extract_sequences_from_cif(cif_file):
-    cif_dict = MMCIF2Dict(cif_file)
+    cif_dict = MMCIF2Dict(str(cif_file))
     seqs = [x for x in cif_dict['_entity_poly.pdbx_seq_one_letter_code']]
     ids = [x for x in cif_dict['_entity_poly.pdbx_strand_id']]
     descs = [x for x in cif_dict['_entity.pdbx_description']]
@@ -40,11 +22,23 @@ def extract_sequences_from_cif(cif_file):
             
     return sequences
 
-class af3_pair():
-    def __init__(self, pred_dir):
-        self.pred_dir = pred_dir
-        self.structure = MMCIF2Dict(f'{pred_dir}/{pred_dir.split("/")[-1]}_model.cif')
-        self.interactor = pred_dir.split('_')[-1]
+
+class af3_pair:
+    def __init__(self, pred_dir=None):
+        if pred_dir is not None:
+            self.name = pred_dir.name
+            self.pred_dir = pred_dir
+            self.structure = pred_dir / f"{pred_dir.name}_model.cif"
+            self.interactor = pred_dir.name.split('__')[-1]
+            self.summaries = list(pred_dir.glob('*summary_confidences.json'))
+            
+        else:
+            self.name = ''
+            self.pred_dir = ''
+            self.structure = {}
+            self.interactor = ''
+            self.summaries = []
+            
         self.min_paes = []
         self.iptms = []
         self.ptms = []
@@ -54,7 +48,6 @@ class af3_pair():
         self.best_score = -np.inf
         self.best_seq = None
         self.best_alignment = None
-        self.summaries = glob.glob(f'{pred_dir}/*/summary_confidences.json')
         self.iCP_attr = None
         
         # with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -77,8 +70,9 @@ class af3_pair():
     #         ptm = result['ptm']
     #     return min_pae, iptm, ptm
         
+        
     def load_chains(self):
-        cif_dict = self.structure
+        cif_dict = MMCIF2Dict(str(self.structure))
 
         three_to_one = {
             'ALA': 'A', 'CYS': 'C', 'ASP': 'D', 'GLU': 'E', 'PHE': 'F',
@@ -107,110 +101,231 @@ class af3_pair():
         
         return self
     
+    
     def calc_iCP(self):
-        with open(f'{self.pred_dir}/{self.pred_dir.split("/")[-1]}_confidences.json', 'r') as f:
+        with open(self.pred_dir / f"{self.pred_dir.name}_confidences.json", 'r') as f:
             self.confidences = json.load(f)
             chain_len = {chain:self.confidences['token_chain_ids'].count(chain) for chain in ['A', 'B']}
             contact_probs = (np.array(self.confidences['contact_probs'])[chain_len['A']:, :chain_len['A']] + np.array(self.confidences['contact_probs'])[:chain_len['A'], chain_len['A']:].T) / 2
             self.iCP = contact_probs.max(1)
         
         return self
-        
-    def map_interactor(self, L):
-        
-        for seq in L:
-            alignments = pairwise2.align.globalms(self.chains[1], seq.seq, 2, -10, -3, -0.1)
-            score = alignments[0][2]
+    
+    
+    @staticmethod
+    def get_best_alignment(chain: str, seq: SeqRecord):
+        aligner = PairwiseAligner()
+        aligner.mismatch_score = -np.inf # Just put a gap instead
+        aligner.match_score = 1
+        try:
+            alignment = next(aligner.align(chain, seq))
+            if alignment.score > (len(chain) * 0.8): # Arbitrarily chosen by none other than myself
+                return alignment.score, seq, alignment.aligned
+            else:
+                return -np.inf, seq, ((), ())
+        except:
+            return -np.inf, seq, ((), ())
+    
+    
+    @staticmethod
+    def get_alignment_wrapper(args):
+        chain, seq = args
+        return af3_pair.get_best_alignment(chain, seq)
+    
 
-            if score > self.best_score:
-                self.best_score = score
-                self.best_seq = seq
-                self.best_alignment = alignments[0]
-            
-        return self
-
-    def map_interactor2(self, L):
+    def map_interactor(self, L, n_cpus=1):
         best_score = self.best_score
         best_seq = self.best_seq
         best_alignment = self.best_alignment
+                
+        args_list = [(self.chains[1], seq) for seq in L]
 
-        def get_best_alignment(seq):
-            alignments = pairwise2.align.globalms(self.chains[1], seq.seq, 2, -10, -3, -0.1)
-            score = alignments[0][2]
-            return score, seq, alignments[0]
-
-        with ThreadPoolExecutor() as executor:
-            results = executor.map(get_best_alignment, L)
+        with ProcessPoolExecutor(max_workers=n_cpus) as executor:
+            results = list(executor.map(af3_pair.get_alignment_wrapper, args_list))
 
             for score, seq, alignment in results:
                 if score > best_score:
                     best_score = score
                     best_seq = seq
                     best_alignment = alignment
-
+                            
         self.best_score = best_score
         self.best_seq = best_seq
         self.best_alignment = best_alignment
 
         return self
     
+    
     def calc_attr(self, L=None):
         
-        if self.best_alignment is None or L is not None: self.map_interactor2(L)
+        if self.best_alignment is None and L is not None: self.map_interactor(L)
         if self.iCP is None: self.calc_iCP()
+        if self.best_seq is None: 
+            logging.info(f'No mappable attribute for {self.name}')
+            return self
         
-        score_new = np.zeros(len(self.best_alignment.seqA))
+        score_new = np.zeros(len(self.best_seq.seq))
         score_new[:] = np.nan
-        score_index = 0
-        for i in range(len(score_new)):
-            if self.best_alignment.seqA[i] == '-': continue
-            score_new[i] = self.iCP[score_index]
-            score_index += 1
-        
-        self.iCP_attr =  np.array([x for x, y in zip(score_new, self.best_alignment.seqB) if y != '-'])
+        for seqA_chunk, seqB_chunk in zip(self.best_alignment[0], self.best_alignment[1]):
+            score_new[seqB_chunk[0]:seqB_chunk[1]] = self.iCP[seqA_chunk[0]:seqA_chunk[1]]
+        self.iCP_attr = score_new
         
         return self
+    
     
     def get_attr(self):
         return self.iCP_attr
         
+        
     def get_iptm(self):
         return self.mean_iptm
+    
     
     def get_min_pae(self):
         return self.min_pae
     
+    
     def get_interactor(self):
         return self.interactor
     
+    
     def get_match(self):
-        return self.best_seq.id, self.best_score
+        if self.best_seq is not None:
+            return self.best_seq.id, self.best_score
+        return None, self.best_score
     
     
+    def get_match_id(self):
+        if self.best_seq is not None:
+            return self.best_seq.id
+        return None
     
-refSeqs = extract_sequences_from_cif(cif_file)
-cif_name = cif_file.split('/')[-1].split('.')[0]
+    
+    def get_match_score(self):
+        return self.best_score
 
-results = glob.glob(f'{baseDir}/{runName}_*')
-results.sort()
 
-af3_pairs = [af3_pair(pair).load_chains().map_interactor2(refSeqs).calc_attr() for pair in results if os.path.exists(f'{pair}/ranking_scores.csv')]
-
-with open(f'{outDir}/{runName}_mappedPairs.pkl', 'wb') as f:
-    pkl.dump(af3_pairs, f)
+def main():
     
-best_dict = {chain:('', 0) for chain in set([x.get_match()[0] for x in af3_pairs])}
-for pair in af3_pairs:
-    if pair.get_match()[1] > best_dict[pair.get_match()[0]][1]:
-        best_dict[pair.get_match()[0]] = (pair.get_interactor(), pair.get_match()[1], pair)
+    n_cpus = (
+        int(os.environ.get("SLURM_CPUS_ON_NODE", 0)) or
+        int(os.environ.get("SLURM_CPUS_PER_TASK", 0)) or
+        int(os.environ.get("PBS_NUM_PPN", 0)) or
+        os.cpu_count()  # fallback to all available CPUs and hope for the best
+    )
+    
+    logging.info(f"Using {n_cpus} CPUs.")
+
+    parser = argparse.ArgumentParser(
+        prog='Process AF3 inference.',
+        description='Problems? Ask Jose.',
+        epilog='Hope it works.'
+    )
+    parser.add_argument(
+        '--runName', 
+        default='attrPaintr', 
+        type=str,
+        help='Name of this run. Can be whatever.'
+    )
+    parser.add_argument(
+        '--baseDir', 
+        required=True, 
+        type=Path,
+        help='Directory containing the raw AF3 inference output.'
+    )
+    parser.add_argument(
+        '--outDir', 
+        required=True, 
+        type=Path,
+        help='Directory where to save the output.'
+    )
+    parser.add_argument(
+        '--cifFile', 
+        required=True, 
+        type=Path,
+        help='Full path to .cif file to paint.'
+    )
+    parser.add_argument(
+        '--save_processed_pairs',
+        action='store_true',
+        help='Whether to save the processed pairs in outDir'
+    )
+
+    in_args = parser.parse_args()
         
-assert(len(set(best_dict.keys())) == len(set([x[0] for x in best_dict.values()])))
+    runName = in_args.runName
+    baseDir = in_args.baseDir
+    outDir = in_args.outDir
+    cif_file = in_args.cifFile    
+    save_pairs = in_args.save_processed_pairs
+    
+    outDir.mkdir(parents=True, exist_ok=True)
+        
+    refSeqs = extract_sequences_from_cif(cif_file)
+    cif_name = cif_file.stem
 
-best_pairs = [x[2] for x in best_dict.values()]
+    results = list(baseDir.glob('*'))
+    results.sort()
+    
+    # Maybe should clean this up
+    try:
+        with open(outDir / f'{runName}_mappedPairs.pkl', 'rb') as f:
+            logging.info(f'Loading processed pairs from existing file...')
+            af3_pairs = pkl.load(f)
 
-with open(f'{outDir}/{runName}_{cif_name}.defattr', 'w+') as f:
-    f.write(f'attribute: iCP_{runName}\nmatch mode: any\nrecipient: residues\n')
-    for pair in best_pairs:
-        for i in range(len(pair.get_attr())):
-            if np.isnan(pair.get_attr()[i]): continue
-            f.write(f'\t/{pair.get_match()[0]}:{i+1}\t{pair.get_attr()[i]}\n')
+    except (FileNotFoundError, EOFError):
+        logging.info(f'Found {len(results)} predictions at {baseDir}. Loading and processing...')
+        af3_pairs = [
+            af3_pair(pair)
+                .load_chains()
+                .map_interactor(refSeqs, n_cpus)
+                .calc_attr() 
+            for pair in results 
+            if (pair / f'{pair.name}_ranking_scores.csv').exists()
+        ]
+        
+        assert len(af3_pairs) > 0
+        
+        if save_pairs:
+            with open(outDir / f'{runName}_mappedPairs.pkl', 'wb') as f:
+                pkl.dump(af3_pairs, f)
+            
+    logging.info(f'Done. Got {len(af3_pairs)} complexes, {sum(pair.best_seq is not None for pair in af3_pairs)} of which mapped to a chain in {cif_name}. Creating attribute file...')
+    
+    # Messy chunks. Maybe I'll fix someday
+    best_dict = {chain:('', 0, None) for chain in set([x.get_match_id() for x in af3_pairs])}
+    for pair in af3_pairs:
+        match_chain_id = pair.get_match_id()
+        current_match_score = pair.get_match_score()
+        if current_match_score > best_dict[match_chain_id][1]:
+            best_dict[match_chain_id] = (pair.get_interactor(), current_match_score, pair)
+            
+    assert(len(set(best_dict.keys())) == len(set([x[0] for x in best_dict.values()])))
+
+    best_pairs = [x[2] for x in best_dict.values()]
+
+    with open(outDir / f'{runName}_{cif_name}.defattr', 'w+') as f:
+        f.write(f'attribute: iCP_{runName}_{cif_name}\nmatch mode: any\nrecipient: residues\n')
+        for pair in best_pairs:
+            if pair is not None:
+                icp_vals = pair.get_attr()
+                match_chain_id = pair.get_match_id()
+                for i in range(len(icp_vals)):
+                    if np.isnan(icp_vals[i]): 
+                        continue
+                    f.write(f'\t/{match_chain_id}:{i+1}\t{icp_vals[i]}\n')
+                    
+    logging.info(f'Wrote {outDir}/{runName}_{cif_name}.defattr')
+    
+    
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(message)s"
+    )
+    
+    logging.info('Mapping screen to structure...')
+    
+    main()
+    
+    logging.info('All done!')
