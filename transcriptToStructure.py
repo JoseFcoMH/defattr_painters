@@ -5,7 +5,7 @@ import pyfaidx
 from Bio.PDB.MMCIF2Dict import MMCIF2Dict
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
-from Bio.Align import trackwiseAligner
+from Bio.Align import PairwiseAligner
 
 from concurrent.futures import ProcessPoolExecutor
 import os
@@ -230,7 +230,7 @@ def main():
     parser.add_argument(
         '--runName',
         required=True, type=str, 
-        help='File to save the output .defattr to.'
+        help='Unique name for this run.'
     )
     parser.add_argument(
         '--gtf', type=Path,
