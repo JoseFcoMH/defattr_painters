@@ -34,16 +34,18 @@ Should be done in a few minutes.
 
 ### Usage of AF3screenToStructure.py
     
-    usage: Process AF3 inference. Asumes a directory structure of {baseDir}/{runName}_{other}, where {runName}_{other} are the {refProtein}_{possibleInteractor} pairs. [-h] --runName RUNNAME [--baseDir BASEDIR] [--outDir OUTDIR] [--cifFile CIFFILE]
+    usage: Process AF3 inference. [-h] [--runName RUNNAME] --baseDir BASEDIR --outDir OUTDIR --cifFile CIFFILE [--save_processed_pairs]
     
     Problems? Ask Jose.
     
     optional arguments:
-      -h, --help         show this help message and exit
-      --runName RUNNAME  Name of run and ref protein to process.
-      --baseDir BASEDIR  Parent directory holding the AF3 inference output.
-      --outDir OUTDIR    Directory to save the output to.
-      --cifFile CIFFILE  Full path to .cif file o paint.
+      -h, --help            show this help message and exit
+      --runName RUNNAME     Name of this run. Can be whatever.
+      --baseDir BASEDIR     Directory containing the raw AF3 inference output.
+      --outDir OUTDIR       Directory where to save the output.
+      --cifFile CIFFILE     Full path to .cif file to paint.
+      --save_processed_pairs
+                            Whether to save the processed pairs in outDir
     
 
 outDir is the folder where the output, a list of processed af3_pair objects and the .defattr file will be saved to.
@@ -97,6 +99,7 @@ Which should also finish in a few seconds.
 [PyRanges_Repo](https://github.com/pyranges/pyranges)
 [Pyranges_Publication](https://academic.oup.com/bioinformatics/article/36/3/918/5543103)
 [ChimeraX](https://onlinelibrary.wiley.com/doi/10.1002/pro.4792)
+
 
 
 
