@@ -262,7 +262,7 @@ def main():
     
     cif_file = in_args.cifFile
     cif_name = cif_file.stem
-    fasta_path = in_args.fasta
+    fasta_path = pyfaidx.Fasta(in_args.fasta)    
     gtf_file = in_args.gtf
         
     outDir = in_args.outDir
@@ -363,3 +363,4 @@ if __name__ == "__main__":
     main()
     
     logging.info('All done!')
+
