@@ -73,8 +73,8 @@ class iclip_track():
                 (pl.col('gene_id') == gene) & 
                 pl.col('feature').str.contains('transcript')
             ).with_columns(
-                pl.col('start').cast(pl.Int32) - 1, # convert to 0-based coords
-                pl.col('end').cast(pl.Int32)
+                pl.col('start').cast(pl.Int64) - 1, # convert to 0-based coords
+                pl.col('end').cast(pl.Int64)
             )
             
         self.chromosome = gene_df['seqname'][0]
@@ -101,17 +101,22 @@ class iclip_track():
         self.crosslinks[crosslinks_at_gene['crosslink_site'] - self.start] = crosslinks_at_gene['n_crosslinks'] 
         if self.strand == '-':
             self.crosslinks = self.crosslinks[::-1]
+            
+        self.crosslinksPM = np.zeros(self.len)
+        self.crosslinksPM[crosslinks_at_gene['crosslink_site'] - self.start] = crosslinks_at_gene['n_crosslinks_per_million'] 
+        if self.strand == '-':
+            self.crosslinks = self.crosslinks[::-1]
         
         assert len(self.crosslinks) == len(self.sequence)
         
         self.best_alignment = None
-        self.best_score = -np.Inf
+        self.best_score = -np.inf
         self.best_seq = None
       
     
     @staticmethod
     def get_best_alignment(chain: str, seq: SeqRecord):
-        aligner = trackwiseAligner()
+        aligner = PairwiseAligner()
         aligner.mismatch_score = -np.inf # Just put a gap instead
         aligner.match_score = 1
         try:
@@ -162,14 +167,20 @@ class iclip_track():
         
         score_new = np.zeros(len(self.best_seq.seq))
         score_new[:] = np.nan
+        score_newPM = np.zeros(len(self.best_seq.seq))
+        score_newPM[:] = np.nan
         for seqA_chunk, seqB_chunk in zip(self.best_alignment[0], self.best_alignment[1]):
             score_new[seqB_chunk[0]:seqB_chunk[1]] = self.crosslinks[seqA_chunk[0]:seqA_chunk[1]]
+            score_newPM[seqB_chunk[0]:seqB_chunk[1]] = self.crosslinksPM[seqA_chunk[0]:seqA_chunk[1]]
         self.crosslinks_attr = score_new
+        self.crosslinksPM_attr = score_newPM
         
         return self
     
     
-    def get_attr(self):
+    def get_attr(self, normalized=False):
+        if normalized:
+            return self.crosslinksPM_attr 
         return self.crosslinks_attr
     
     
@@ -255,14 +266,14 @@ def main():
 
     in_args = parser.parse_args()
 
-    input_beds = in_args.inputFiles.split(',')
+    input_tsvs = in_args.inputFiles.split(',')
     input_strands = in_args.inputStrands.split(',')
     
     genesOfInterest = in_args.genesOfInterest.split(',')
     
     cif_file = in_args.cifFile
     cif_name = cif_file.stem
-    fasta_path = pyfaidx.Fasta(in_args.fasta)    
+    fasta_path = pyfaidx.Fasta(in_args.fasta)
     gtf_file = in_args.gtf
         
     outDir = in_args.outDir
@@ -279,21 +290,25 @@ def main():
     
         
     crosslinks_df = pl.DataFrame({
-        'chromosome': pl.Series(pl.utf8),
-        'crosslink_site': pl.Series(pl.int64),
-        'n_crosslinks': pl.Series(pl.int64),
-        'strand': pl.Series(pl.utf8)   
+        'chromosome': pl.Series([], dtype=pl.Utf8),
+        'crosslink_site': pl.Series([], dtype=pl.Int64),
+        'n_crosslinks': pl.Series([], dtype=pl.Int64),
+        'strand': pl.Series([], dtype=pl.Utf8)   
     })
-    for input_bed, strand in zip(input_beds, input_strands):
-        logging.info(f'Loading input file at {input_bed}, {strand} strand')
+    for input_tsv, strand in zip(input_tsvs, input_strands):
+        logging.info(f'Loading input file at {input_tsv}, {strand} strand')
         
-        temp_bed = pl.read_csv(input_bed, separator='\t', has_header=False) 
+        temp_bed = pl.read_csv(input_tsv, separator='\t', has_header=False) 
         temp_bed = (
             temp_bed
             .rename({old:new for old, new in zip(temp_bed.columns, ['chromosome', 'crosslink_site', 'n_crosslinks'])})
             .with_columns(pl.lit(strand).alias('strand'))
         )
         crosslinks_df = pl.concat([crosslinks_df, temp_bed])
+        
+    crosslinks_df = crosslinks_df.with_columns(
+        (10e6 * pl.col('n_crosslinks') / pl.col('n_crosslinks').sum()).alias('n_crosslinks_per_million')
+    )
     
     logging.info(f'Parsing gtf {gtf_file}')
     column_names = ['seqname', 'source', 'feature', 'start', 'end', 'score', 'strand', 'frame', 'attribute']
@@ -337,19 +352,20 @@ def main():
     assert(len(set(best_dict.keys())) == len(set([x['gene_name'] for x in best_dict.values()])))
 
     best_tracks: list[iclip_track|None] = [x['track'] for x in best_dict.values()]
-                
-    with open(outDir / f'{runName}_{cif_name}.defattr', 'w+') as f:
-        f.write(f'attribute: crosslinks_{runName}_{cif_name}\nmatch mode: any\nrecipient: residues\n')
-        for track in best_tracks:
-            if track is not None:
-                crosslinks_vals = track.get_attr()
-                match_chain_id = track.get_match_id()
-                for i in range(len(crosslinks_vals)):
-                    if np.isnan(crosslinks_vals[i]): 
-                        continue
-                    f.write(f'\t/{match_chain_id}:{i+1}\t{crosslinks_vals[i]}\n')
     
-    logging.info(f'Wrote {outDir}/{runName}_{cif_name}.defattr')
+    for norm_name, is_norm in zip(['per_million', 'raw'], [True, False]):            
+        with open(outDir / f'{runName}_{cif_name}_{norm_name}.defattr', 'w+') as f:
+            f.write(f'attribute: crosslinks_{runName}_{cif_name}_{norm_name}\nmatch mode: any\nrecipient: residues\n')
+            for track in best_tracks:
+                if track is not None:
+                    crosslinks_vals = track.get_attr(normalized=is_norm)
+                    match_chain_id = track.get_match_id()
+                    for i in range(len(crosslinks_vals)):
+                        if np.isnan(crosslinks_vals[i]): 
+                            continue
+                        f.write(f'\t/{match_chain_id}:{i+1}\t{crosslinks_vals[i]}\n')
+
+        logging.info(f'Wrote {outDir}/{runName}_{cif_name}_{norm_name}.defattr')
     
 
 if __name__ == "__main__":
@@ -363,4 +379,3 @@ if __name__ == "__main__":
     main()
     
     logging.info('All done!')
-
